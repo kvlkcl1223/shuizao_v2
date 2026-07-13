@@ -18,13 +18,16 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dma.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "motor.h"
+#include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,7 +54,7 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+void PG_Status_Send(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -88,6 +91,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
@@ -95,7 +99,10 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
+  Motor_Init();
 
+  /* 上电自检: 逐路测试全部电机 (若不需要可注释掉) */
+  Motor_TestAll();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -105,6 +112,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    PG_Status_Send();
+    HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }
@@ -149,6 +158,42 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/**
+  * @brief  读取 PG1~PG16 引脚电平并通过 USART2 发送
+  * @note   格式: "PG01:1 PG02:0 ... PG16:1\r\n"
+  *         波特率: 115200, 超时 100ms
+  */
+void PG_Status_Send(void)
+{
+    /* 引脚编号表 (按 PG1~PG16 顺序) */
+    const uint16_t pins[16] = {
+        PG1_Pin,   PG2_Pin,   PG3_Pin,   PG4_Pin,
+        PG5_Pin,   PG6_Pin,   PG7_Pin,   PG8_Pin,
+        PG9_Pin,   PG10_Pin,  PG11_Pin,  PG12_Pin,
+        PG13_Pin,  PG14_Pin,  PG15_Pin,  PG16_Pin
+    };
+
+    /* 对应 GPIO 端口表 */
+    GPIO_TypeDef * const ports[16] = {
+        PG1_GPIO_Port,   PG2_GPIO_Port,   PG3_GPIO_Port,   PG4_GPIO_Port,
+        PG5_GPIO_Port,   PG6_GPIO_Port,   PG7_GPIO_Port,   PG8_GPIO_Port,
+        PG9_GPIO_Port,   PG10_GPIO_Port,  PG11_GPIO_Port,  PG12_GPIO_Port,
+        PG13_GPIO_Port,  PG14_GPIO_Port,  PG15_GPIO_Port,  PG16_GPIO_Port
+    };
+
+    char    buf[200];
+    uint8_t len = 0;
+
+    for (uint8_t i = 0; i < 16; i++)
+    {
+        GPIO_PinState level = HAL_GPIO_ReadPin(ports[i], pins[i]);
+        len += sprintf(buf + len, "PG%02d:%d ", i + 1, level);
+    }
+    len += sprintf(buf + len, "\r\n");
+
+    HAL_UART_Transmit(&huart2, (uint8_t *)buf, len, 100);
+}
 
 /* USER CODE END 4 */
 
